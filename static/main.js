@@ -1,15 +1,32 @@
 //========================================================================
 // Drag and drop image handling
 //========================================================================
-
+var itms;
 var fileDrag = document.getElementById("file-drag");
 var fileSelect = document.getElementById("file-upload");
 
-// Add event listeners
+// // Add event listeners
 fileDrag.addEventListener("dragover", fileDragHover, false);
 fileDrag.addEventListener("dragleave", fileDragHover, false);
-fileDrag.addEventListener("drop", fileSelectHandler, false);
-fileSelect.addEventListener("change", fileSelectHandler, false);
+// fileDrag.addEventListener("drop", fileSelectHandler, false);
+// fileSelect.addEventListener("change", fileSelectHandler, false);
+
+// var elDrop = document.getElementById('dropzone');
+// var elItems = document.getElementById('items');
+
+// elDrop.addEventListener('dragover', function (event) {
+//     event.preventDefault();
+//     elItems.innerHTML = 0;
+// });
+
+fileDrag.addEventListener('drop', async function (event) {
+    event.preventDefault();
+    console.log(event.dataTransfer.items);
+    console.log(event.dataTransfer.files);
+    let items = await getAllFileEntries(event.dataTransfer.items);
+});
+
+
 
 function fileDragHover(e) {
   // prevent default behaviour
@@ -19,14 +36,14 @@ function fileDragHover(e) {
   fileDrag.className = e.type === "dragover" ? "upload-box dragover" : "upload-box";
 }
 
-function fileSelectHandler(e) {
-  // handle file selecting
-  var files = e.target.files || e.dataTransfer.files;
-  fileDragHover(e);
-  for (var i = 0, f; (f = files[i]); i++) {
-    loadFile(f);
-  }
-}
+// function fileSelectHandler(e) {
+//   // handle file selecting
+//   var files = e.target.files || e.dataTransfer.files;
+//   fileDragHover(e);
+//   for (var i = 0, f; (f = files[i]); i++) {
+//     loadFile(f);
+//   }
+// }
 
 //========================================================================
 // Web page elements for functions to use
@@ -200,6 +217,65 @@ function clearTable() {
       }
     });
 }
+
+
+
+
+
+// Drop handler function to get all files
+async function getAllFileEntries(dataTransferItemList) {
+  let fileEntries = [];
+  // Use BFS to traverse entire directory/file structure
+  let queue = [];
+  // Unfortunately dataTransferItemList is not iterable i.e. no forEach
+  for (let i = 0; i < dataTransferItemList.length; i++) {
+    queue.push(dataTransferItemList[i].webkitGetAsEntry());
+  }
+  while (queue.length > 0) {
+    let entry = queue.shift();
+    if (entry.isFile) {
+      let file = await getFile(entry);
+      loadFile(file);
+      fileEntries.push(entry);
+    } else if (entry.isDirectory) {
+      let reader = entry.createReader();
+      queue.push(...await readAllDirectoryEntries(reader));
+    }
+  }
+  return fileEntries;
+}
+
+// Get all the entries (files or sub-directories) in a directory by calling readEntries until it returns empty array
+async function readAllDirectoryEntries(directoryReader) {
+  let entries = [];
+  let readEntries = await readEntriesPromise(directoryReader);
+  while (readEntries.length > 0) {
+    entries.push(...readEntries);
+    readEntries = await readEntriesPromise(directoryReader);
+  }
+  return entries;
+}
+
+// Wrap readEntries in a promise to make working with readEntries easier
+async function readEntriesPromise(directoryReader) {
+  try {
+    return await new Promise((resolve, reject) => {
+      directoryReader.readEntries(resolve, reject);
+    });
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+async function getFile(fileEntry) {
+  try {
+    return await new Promise((resolve, reject) => fileEntry.file(resolve, reject));
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+
 
 function hide(el) {
   // hide an element

@@ -108,8 +108,11 @@ def predictTest():
     if request.method == 'POST':
         encoded_file = request.json['file'].partition(';base64,')[2]
         decoded_file = base64.b64decode(encoded_file)
-        dicom = pydicom.dcmread(DicomBytesIO(decoded_file))
-        result = Results(filename=request.json['title'], accession=dicom.PatientID, result="processing", tag=request.json['tag'])
+        try:
+            dicom = pydicom.dcmread(DicomBytesIO(decoded_file))
+            result = Results(filename=request.json['title'], accession=dicom.PatientID, result="processing", tag=request.json['tag'])
+        except Exception as e:
+            result = Results(filename=request.json['title'], accession='n/a', result="not a dicom", tag=request.json['tag'])
         db.session.add(result)
         db.session.commit()
         return "success"
