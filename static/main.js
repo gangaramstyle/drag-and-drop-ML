@@ -203,6 +203,19 @@ function download_table_as_csv(table_id) {
   document.body.removeChild(link);
 }
 
+function runModel() {
+  fetch("/run-model", {
+    method: "POST",
+    headers: {
+      "Content-Length": 0
+    }
+  })
+    .then(resp => {
+      if (resp.ok) {
+      }
+    });
+}
+
 function clearTable() {
   fetch("/clear-table", {
     method: "POST",

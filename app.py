@@ -3,10 +3,8 @@ import sys
 import base64
 import pydicom
 from pydicom.filebase import DicomBytesIO
-sys.path.append('/BreatHeatDocker')
-print(os.listdir('/BreatHeatDocker/'))
-import Infer
-from Infer import pre_process
+print(os.listdir('/app/BreatHeatDocker'))
+import BreatHeatDocker.Infer as infer
 
 # Flask
 from flask import Flask, redirect, url_for, request, render_template, Response, jsonify, redirect
@@ -15,14 +13,6 @@ from gevent.pywsgi import WSGIServer
 
 # SQL
 from flask_sqlalchemy import SQLAlchemy
-
-# TensorFlow and tf.keras
-import tensorflow as tf
-from tensorflow import keras
-
-from tensorflow.keras.applications.imagenet_utils import preprocess_input, decode_predictions
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
 
 # Some utilites
 import numpy as np
@@ -46,23 +36,8 @@ class Results(db.Model):
 
 db.create_all()
 
-# You can use pretrained model from Keras
-# Check https://keras.io/applications/
-# or https://www.tensorflow.org/api_docs/python/tf/keras/applications
-
-#from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2
-#model = MobileNetV2(weights='imagenet')
-
 print('Model loaded. Check http://127.0.0.1:5000/')
 
-
-# Model saved with Keras model.save()
-MODEL_PATH = 'models/your_model.h5'
-
-# Load your own trained model
-# model = load_model(MODEL_PATH)
-# model._make_predict_function()          # Necessary
-# print('Model loaded. Start serving...')
 
 table_header = [
     'filename',
@@ -94,8 +69,8 @@ def inferenceStatus():
 @app.route('/run-model', methods=['POST'])
 def runModel():
     if request.method == 'POST':
-        #RUN MODEL
-        #SAVE MODEL
+        print(os.listdir('/app/data/raw'))
+        infer.run_pipeline()
 
         return "Success"
     return 'Error'
@@ -107,12 +82,12 @@ def uploadFile():
         decoded_file = base64.b64decode(encoded_file)
         try:
             dicom = pydicom.dcmread(DicomBytesIO(decoded_file))
-            with open(f"/app/data/{request.json['title']}", "wb") as fh:
+            with open(f"/app/data/raw/{request.json['title']}", "wb") as fh:
                 fh.write(decoded_file)
-            print(os.listdir('/app/data/'))
             #TODO: Save dicom file
             result = Results(filename=request.json['title'], accession=dicom.PatientID, result="ready to process", tag=request.json['tag'])
         except Exception as e:
+            print(e)
             result = Results(filename=request.json['title'], accession='n/a', result="not a dicom", tag=request.json['tag'])
         db.session.add(result)
         db.session.commit()
