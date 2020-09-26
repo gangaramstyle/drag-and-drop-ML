@@ -16,8 +16,9 @@
     <input id="tag" type="text" class="tag-box" placeholder="Type text to tag uploads with">
   </div>
   <div style="margin-bottom: 2rem;">
-    <input type="button" value="Download as CSV" class="button" onclick="download_table_as_csv('table');" />
-    <input type="button" value="Clear All" class="button" onclick="clearTable();" />
+    <input type="button" id="run_btn" value="Run Model" class="button" disabled/>
+    <input type="button" id="csv_btn" value="Download as CSV" class="button" onclick="download_table_as_csv('table');" hidden/>    
+    <input type="button" id="clear_btn" value="Clear All" class="button" onclick="clearTable();" disabled/>
   </div>
 </div>
 

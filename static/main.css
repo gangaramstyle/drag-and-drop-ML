@@ -29,7 +29,7 @@ table {
   background-color: rgb(16, 110, 190);
 }
 
-.button.disabled {
+.button:disabled {
   pointer-events: none;
   background-color: #cccccc;
   color: #666666;

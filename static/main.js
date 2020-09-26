@@ -21,9 +21,9 @@ fileDrag.addEventListener("dragleave", fileDragHover, false);
 
 fileDrag.addEventListener('drop', async function (event) {
     event.preventDefault();
-    console.log(event.dataTransfer.items);
-    console.log(event.dataTransfer.files);
     let items = await getAllFileEntries(event.dataTransfer.items);
+    document.getElementById("run_btn").disabled = false;
+    document.getElementById("clear_btn").disabled = false;
 });
 
 
@@ -95,7 +95,6 @@ function updateTable() {
         resp.json().then(data => {
           var headerData = data['header'];
           var bodyData = data['body'];
-          console.log(bodyData);
           if (data['body'].length != 0) {
             // create table if table doesn't exist
             var table = document.getElementById('table');
@@ -160,7 +159,7 @@ function updateTable() {
 }
 
 function submitFile(file, title, tag) {
-  fetch("/predict-test", {
+  fetch("/upload", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

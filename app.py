@@ -3,6 +3,10 @@ import sys
 import base64
 import pydicom
 from pydicom.filebase import DicomBytesIO
+sys.path.append('/BreatHeatDocker')
+print(os.listdir('/BreatHeatDocker/'))
+import Infer
+from Infer import pre_process
 
 # Flask
 from flask import Flask, redirect, url_for, request, render_template, Response, jsonify, redirect
@@ -60,22 +64,6 @@ MODEL_PATH = 'models/your_model.h5'
 # model._make_predict_function()          # Necessary
 # print('Model loaded. Start serving...')
 
-
-def model_predict(img, model):
-    img = img.resize((224, 224))
-
-    # Preprocessing the image
-    x = image.img_to_array(img)
-    # x = np.true_divide(x, 255)
-    x = np.expand_dims(x, axis=0)
-
-    # Be careful how your trained model deals with the input
-    # otherwise, it won't make correct prediction!
-    x = preprocess_input(x, mode='tf')
-
-    preds = model.predict(x)
-    return preds
-
 table_header = [
     'filename',
     'accession',
@@ -103,57 +91,42 @@ def inferenceStatus():
 
         return jsonify({'header': table_header, 'body': table_body})
 
-@app.route('/predict-test', methods=['POST'])
-def predictTest():
+@app.route('/run-model', methods=['POST'])
+def runModel():
+    if request.method == 'POST':
+        #RUN MODEL
+        #SAVE MODEL
+
+        return "Success"
+    return 'Error'
+
+@app.route('/upload', methods=['POST'])
+def uploadFile():
     if request.method == 'POST':
         encoded_file = request.json['file'].partition(';base64,')[2]
         decoded_file = base64.b64decode(encoded_file)
         try:
             dicom = pydicom.dcmread(DicomBytesIO(decoded_file))
-            result = Results(filename=request.json['title'], accession=dicom.PatientID, result="processing", tag=request.json['tag'])
+            with open(f"/app/data/{request.json['title']}", "wb") as fh:
+                fh.write(decoded_file)
+            print(os.listdir('/app/data/'))
+            #TODO: Save dicom file
+            result = Results(filename=request.json['title'], accession=dicom.PatientID, result="ready to process", tag=request.json['tag'])
         except Exception as e:
             result = Results(filename=request.json['title'], accession='n/a', result="not a dicom", tag=request.json['tag'])
         db.session.add(result)
         db.session.commit()
-        return "success"
-        #return render_template('index.html', results=results)
+        return "Success"
     return 'Error'
 
 @app.route('/clear-table', methods=['POST'])
 def clearTable():
     if request.method == 'POST':
+        #TODO: Delete data folder
         Results.query.delete()
         db.session.commit()
         return 'Success'
     return 'Error'
-
-
-@app.route('/predict', methods=['GET', 'POST'])
-def predict():
-    if request.method == 'POST':
-        print(request)
-        # Get the image from post request
-        img = base64_to_pil(request.json)
-
-        # Save the image to ./uploads
-        # img.save("./uploads/image.png")
-
-        # # Make prediction
-        # preds = model_predict(img, model)
-
-        # # Process your result for human
-        # pred_proba = "{:.3f}".format(np.amax(preds))    # Max probability
-        # pred_class = decode_predictions(preds, top=1)   # ImageNet Decode
-
-        # result = str(pred_class[0][0][1])               # Convert to string
-        # result = result.replace('_', ' ').capitalize()
-        
-        # Serialize the result, you can add additional fields
-        # return jsonify(result=result, probability=pred_proba)
-        return jsonify(result="result", probability=0.5)
-
-    return None
-
 
 if __name__ == '__main__':
     # app.run(port=5002, threaded=False)
