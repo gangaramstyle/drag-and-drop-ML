@@ -1,32 +1,109 @@
 //========================================================================
 // Drag and drop image handling
 //========================================================================
-var itms;
-var fileDrag = document.getElementById("file-drag");
-var fileSelect = document.getElementById("file-upload");
 
-// // Add event listeners
-fileDrag.addEventListener("dragover", fileDragHover, false);
-fileDrag.addEventListener("dragleave", fileDragHover, false);
-// fileDrag.addEventListener("drop", fileSelectHandler, false);
-// fileSelect.addEventListener("change", fileSelectHandler, false);
+var r = new Resumable({
+  target: '/resumable',
+  testChunks: true
+});
 
-// var elDrop = document.getElementById('dropzone');
-// var elItems = document.getElementById('items');
+r.assignDrop(document.getElementById("file-drag"));
+r.assignBrowse(document.getElementById("file-upload"));
 
-// elDrop.addEventListener('dragover', function (event) {
-//     event.preventDefault();
-//     elItems.innerHTML = 0;
-// });
+r.on('fileAdded', function(file) {
+  r.upload();
+});
 
-fileDrag.addEventListener('drop', async function (event) {
-    event.preventDefault();
-    let items = await getAllFileEntries(event.dataTransfer.items);
-    document.getElementById("run_btn").disabled = false;
-    document.getElementById("clear_btn").disabled = false;
+r.on('fileSuccess', function(file,message){
+  updateTable()
+});
+
+r.on('complete', function(){
+  console.log("complete")
+  document.getElementById("run_btn").hidden = false;
+  document.getElementById("clear_btn").hidden = false;
+  document.getElementById("csv_btn").hidden = true;
+  document.getElementById("run_btn").disabled = false;
+  document.getElementById("clear_btn").disabled = false;
+  document.getElementById("csv_btn").disabled = true;
 });
 
 
+function runModel() {
+  document.getElementById("run_btn").hidden = false;
+  document.getElementById("clear_btn").hidden = false;
+  document.getElementById("csv_btn").hidden = true;
+  document.getElementById("run_btn").disabled = true;
+  document.getElementById("clear_btn").disabled = true;
+  document.getElementById("csv_btn").disabled = true;
+  fetch("/run-model", {
+    method: "POST",
+    headers: {
+      "Content-Length": 0
+    }
+  })
+    .then(resp => {
+      if (resp.ok) {
+        updateTable();
+        document.getElementById("run_btn").hidden = true;
+        document.getElementById("clear_btn").hidden = false;
+        document.getElementById("csv_btn").hidden = false;
+        document.getElementById("run_btn").disabled = true;
+        document.getElementById("clear_btn").disabled = false;
+        document.getElementById("csv_btn").disabled = false;
+      }
+    });
+}
+
+function clearTable() {
+  fetch("/clear-table", {
+    method: "POST",
+    headers: {
+      "Content-Length": 0
+    }
+  })
+    .then(resp => {
+      if (resp.ok) {
+        updateTable();
+        document.getElementById("run_btn").hidden = false;
+        document.getElementById("clear_btn").hidden = false;
+        document.getElementById("csv_btn").hidden = true;
+        document.getElementById("run_btn").disabled = true;
+        document.getElementById("clear_btn").disabled = true;
+        document.getElementById("csv_btn").disabled = true;
+      }
+    });
+}
+
+function download_table_as_csv(table_id) {
+  // Select rows from table_id
+  var rows = document.querySelectorAll('table#' + table_id + ' tr');
+  // Construct csv
+  var csv = [];
+  for (var i = 0; i < rows.length; i++) {
+      var row = [], cols = rows[i].querySelectorAll('td, th');
+      for (var j = 0; j < cols.length; j++) {
+          // Clean innertext to remove multiple spaces and jumpline (break csv)
+          var data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ')
+          // Escape double-quote with double-double-quote (see https://stackoverflow.com/questions/17808511/properly-escape-a-double-quote-in-csv)
+          data = data.replace(/"/g, '""');
+          // Push escaped string
+          row.push('"' + data + '"');
+      }
+      csv.push(row.join(';'));
+  }
+  var csv_string = csv.join('\n');
+  // Download it
+  var filename = 'export_' + table_id + '_' + new Date().toLocaleDateString() + '.csv';
+  var link = document.createElement('a');
+  link.style.display = 'none';
+  link.setAttribute('target', '_blank');
+  link.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv_string));
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
 
 function fileDragHover(e) {
   // prevent default behaviour
@@ -34,52 +111,6 @@ function fileDragHover(e) {
   e.stopPropagation();
 
   fileDrag.className = e.type === "dragover" ? "upload-box dragover" : "upload-box";
-}
-
-// function fileSelectHandler(e) {
-//   // handle file selecting
-//   var files = e.target.files || e.dataTransfer.files;
-//   fileDragHover(e);
-//   for (var i = 0, f; (f = files[i]); i++) {
-//     loadFile(f);
-//   }
-// }
-
-//========================================================================
-// Web page elements for functions to use
-//========================================================================
-
-var predResult = document.getElementById("pred-result");
-var loader = document.getElementById("loader");
-
-//========================================================================
-// Main button events
-//========================================================================
-
-function submitImage() {
-  // action for the submit button
-  console.log("submit");
-
-  if (!imageDisplay.src || !imageDisplay.src.startsWith("data")) {
-    window.alert("Please select an image before submit.");
-    return;
-  }
-
-  loader.classList.remove("hidden");
-  imageDisplay.classList.add("loading");
-
-  // call the predict function of the backend
-  predictImage(imageDisplay.src);
-}
-
-
-function loadFile(file) {
-  var reader = new FileReader();
-  var tag = document.getElementById("tag").value;
-  reader.readAsDataURL(file);
-  reader.onloadend = () => {
-    submitFile(reader.result, file.name, tag);
-  };
 }
 
 //========================================================================
@@ -156,145 +187,4 @@ function updateTable() {
       console.log("An error occured", err.message);
       window.alert("Oops! Something went wrong.");
     });
-}
-
-function submitFile(file, title, tag) {
-  fetch("/upload", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body:    JSON.stringify({title: title, file: file, tag: tag})
-  })
-    .then(resp => {
-      if (resp.ok) {
-        updateTable();
-      }
-    });
-}
-
-function download_table_as_csv(table_id) {
-  // Select rows from table_id
-  var rows = document.querySelectorAll('table#' + table_id + ' tr');
-  // Construct csv
-  var csv = [];
-  for (var i = 0; i < rows.length; i++) {
-      var row = [], cols = rows[i].querySelectorAll('td, th');
-      for (var j = 0; j < cols.length; j++) {
-          // Clean innertext to remove multiple spaces and jumpline (break csv)
-          var data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ')
-          // Escape double-quote with double-double-quote (see https://stackoverflow.com/questions/17808511/properly-escape-a-double-quote-in-csv)
-          data = data.replace(/"/g, '""');
-          // Push escaped string
-          row.push('"' + data + '"');
-      }
-      csv.push(row.join(';'));
-  }
-  var csv_string = csv.join('\n');
-  // Download it
-  var filename = 'export_' + table_id + '_' + new Date().toLocaleDateString() + '.csv';
-  var link = document.createElement('a');
-  link.style.display = 'none';
-  link.setAttribute('target', '_blank');
-  link.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv_string));
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-function runModel() {
-  fetch("/run-model", {
-    method: "POST",
-    headers: {
-      "Content-Length": 0
-    }
-  })
-    .then(resp => {
-      if (resp.ok) {
-      }
-    });
-}
-
-function clearTable() {
-  fetch("/clear-table", {
-    method: "POST",
-    headers: {
-      "Content-Length": 0
-    }
-  })
-    .then(resp => {
-      if (resp.ok) {
-        updateTable();
-      }
-    });
-}
-
-
-
-
-
-// Drop handler function to get all files
-async function getAllFileEntries(dataTransferItemList) {
-  let fileEntries = [];
-  // Use BFS to traverse entire directory/file structure
-  let queue = [];
-  // Unfortunately dataTransferItemList is not iterable i.e. no forEach
-  for (let i = 0; i < dataTransferItemList.length; i++) {
-    queue.push(dataTransferItemList[i].webkitGetAsEntry());
-  }
-  while (queue.length > 0) {
-    let entry = queue.shift();
-    if (entry.isFile) {
-      let file = await getFile(entry);
-      loadFile(file);
-      fileEntries.push(entry);
-    } else if (entry.isDirectory) {
-      let reader = entry.createReader();
-      queue.push(...await readAllDirectoryEntries(reader));
-    }
-  }
-  return fileEntries;
-}
-
-// Get all the entries (files or sub-directories) in a directory by calling readEntries until it returns empty array
-async function readAllDirectoryEntries(directoryReader) {
-  let entries = [];
-  let readEntries = await readEntriesPromise(directoryReader);
-  while (readEntries.length > 0) {
-    entries.push(...readEntries);
-    readEntries = await readEntriesPromise(directoryReader);
-  }
-  return entries;
-}
-
-// Wrap readEntries in a promise to make working with readEntries easier
-async function readEntriesPromise(directoryReader) {
-  try {
-    return await new Promise((resolve, reject) => {
-      directoryReader.readEntries(resolve, reject);
-    });
-  } catch (err) {
-    console.log(err);
-  }
-}
-
-async function getFile(fileEntry) {
-  try {
-    return await new Promise((resolve, reject) => fileEntry.file(resolve, reject));
-  } catch (err) {
-    console.log(err);
-  }
-}
-
-
-
-function hide(el) {
-  // hide an element
-  el.classList.add("hidden");
-}
-
-function show(el) {
-  // show an element
-  el.classList.remove("hidden");
 }
