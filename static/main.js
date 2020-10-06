@@ -4,13 +4,17 @@
 
 var r = new Resumable({
   target: '/resumable',
-  testChunks: true
+  testChunks: true,
+  query: function(file) {
+    return {tag: document.getElementById('tag').value};
+  }
 });
 
 r.assignDrop(document.getElementById("file-drag"));
 r.assignBrowse(document.getElementById("file-upload"));
 
 r.on('fileAdded', function(file) {
+  console.log(file);
   r.upload();
 });
 
@@ -26,6 +30,11 @@ r.on('complete', function(){
   document.getElementById("run_btn").disabled = false;
   document.getElementById("clear_btn").disabled = false;
   document.getElementById("csv_btn").disabled = true;
+});
+
+
+r.on('progress', () => {
+  console.log(r.progress());
 });
 
 
@@ -65,6 +74,7 @@ function clearTable() {
     .then(resp => {
       if (resp.ok) {
         updateTable();
+        r.files = [];
         document.getElementById("run_btn").hidden = false;
         document.getElementById("clear_btn").hidden = false;
         document.getElementById("csv_btn").hidden = true;
@@ -105,13 +115,13 @@ function download_table_as_csv(table_id) {
   document.body.removeChild(link);
 }
 
-function fileDragHover(e) {
-  // prevent default behaviour
-  e.preventDefault();
-  e.stopPropagation();
+// function fileDragHover(e) {
+//   // prevent default behaviour
+//   e.preventDefault();
+//   e.stopPropagation();
 
-  fileDrag.className = e.type === "dragover" ? "upload-box dragover" : "upload-box";
-}
+//   fileDrag.className = e.type === "dragover" ? "upload-box dragover" : "upload-box";
+// }
 
 //========================================================================
 // Helper functions

@@ -4,8 +4,8 @@ import base64
 import pydicom
 import time
 import shutil
+from pathlib import Path
 from pydicom.filebase import DicomBytesIO
-print(os.listdir('/app/BreatHeatDocker'))
 import BreatHeatDocker.Infer as infer
 
 # Flask
@@ -40,7 +40,6 @@ db.create_all()
 
 print('Model loaded. Check http://127.0.0.1:5000/')
 
-
 table_header = [
     'filename',
     'accession',
@@ -48,13 +47,13 @@ table_header = [
     'result'
 ]
 
+data_base = "/app/data/"
 temp_base = "/app/data/tmp/"
-if not os.path.isdir(temp_base):
-    os.makedirs(temp_base)
-
 raw_base = "/app/data/raw/"
-if not os.path.isdir(raw_base):
-    os.makedirs(raw_base)
+pprocessed_base = "/app/data/pprocessed/"
+
+def make_subdirectories(directory):
+    Path(directory).mkdir(parents=True, exist_ok=True)
 
 def delete_folder_contents(folder):
     for filename in os.listdir(folder):
@@ -84,6 +83,7 @@ def resumable():
     resumableIdentfier = request.args.get('resumableIdentifier', type=str)
     resumableFilename = request.args.get('resumableFilename', type=str)
     resumableChunkNumber = request.args.get('resumableChunkNumber', type=int)
+    print(resumableIdentfier, resumableFilename, resumableChunkNumber)
 
     if not resumableIdentfier or not resumableFilename or not resumableChunkNumber:
         # Parameters are missing or invalid
@@ -111,13 +111,14 @@ def resumable_post():
     resumableChunkNumber = request.form.get('resumableChunkNumber', default=1, type=int)
     resumableFilename = request.form.get('resumableFilename', default='error', type=str)
     resumableIdentfier = request.form.get('resumableIdentifier', default='error', type=str)
+    tag_text = request.form.get('tag', default='', type=str)
+
     # get the chunk data
     chunk_data = request.files['file']
 
     # make our temp directory
     temp_dir = os.path.join(temp_base, resumableIdentfier)
-    if not os.path.isdir(temp_dir):
-        os.makedirs(temp_dir)
+    make_subdirectories(temp_dir)
 
     # save the chunk data
     chunk_name = get_chunk_name(resumableFilename, resumableChunkNumber)
@@ -141,25 +142,24 @@ def resumable_post():
     # combine all the chunks to create the final file
     if upload_finished_complete:
         target_file_name = os.path.join(temp_base, resumableFilename)
+        make_subdirectories(temp_base)
         with open(target_file_name, "ab") as target_file:
             for p in chunk_paths:
                 stored_chunk_file_name = p
                 stored_chunk_file = open(stored_chunk_file_name, 'rb')
                 target_file.write(stored_chunk_file.read())
                 stored_chunk_file.close()
-                os.unlink(stored_chunk_file_name)
-                os.remove
         target_file.close()
         shutil.rmtree(temp_dir)
-        print(f'File saved to: {target_file_name}')
-        #app.logger.debug('File saved to: %s', target_file_name)
+        app.logger.debug('File saved to: %s', target_file_name)
+        make_subdirectories(raw_base)
         try:
             dicom = pydicom.dcmread(target_file_name)
-            result = Results(filename=resumableFilename, accession=dicom.PatientID, result="ready to process", tag="1")
-            shutil.move(target_file_name, f"/app/data/raw/{resumableFilename}")
+            result = Results(filename=resumableFilename, accession=dicom.PatientID, result="ready to process", tag=tag_text)
+            shutil.move(target_file_name, f"{raw_base}{resumableFilename}")
         except Exception as e:
             print(e)
-            result = Results(filename=resumableFilename, accession='n/a', result="not a dicom", tag="1")
+            result = Results(filename=resumableFilename, accession='n/a', result="not a dicom", tag=tag_text)
             input("this is not a dicom")
         db.session.add(result)
         db.session.commit()
@@ -182,17 +182,23 @@ def inferenceStatus():
 @app.route('/run-model', methods=['POST'])
 def runModel():
     if request.method == 'POST':
-        print(os.listdir('/app/data/raw'))
-        infer.run_pipeline()
-
+        make_subdirectories(pprocessed_base)
+        results = infer.run_pipeline()
+        for result_set in results:
+            for idx in result_set:
+                file = os.path.split(result_set[idx]['File'])[1]
+                score = result_set[idx]['Cancer Score']
+                res = Results.query.filter_by(filename=file).first()
+                print(file, score, res)
+                res.result = str(score)
+                db.session.commit()
         return "Success"
     return 'Error'
 
 @app.route('/clear-table', methods=['POST'])
 def clearTable():
     if request.method == 'POST':
-        delete_folder_contents(raw_base)
-        delete_folder_contents(temp_base)
+        delete_folder_contents(data_base)
         Results.query.delete()
         db.session.commit()
         return 'Success'
