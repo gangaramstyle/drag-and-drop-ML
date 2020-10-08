@@ -1,30 +1,21 @@
 import os
-import sys
-import base64
 import pydicom
-import time
 import shutil
 from pathlib import Path
-from pydicom.filebase import DicomBytesIO
 import BreatHeatDocker.Infer as infer
 
 # Flask
-from flask import Flask, redirect, url_for, request, render_template, Response, jsonify, abort, redirect
-from werkzeug.utils import secure_filename
+from flask import Flask, request, render_template, jsonify, abort
 from gevent.pywsgi import WSGIServer
 
 # SQL
 from flask_sqlalchemy import SQLAlchemy
 
-# Some utilites
-import numpy as np
-from util import base64_to_pil
-import json
-
 # Declare a flask app
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
 db = SQLAlchemy(app)
+
 
 class Results(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -35,6 +26,7 @@ class Results(db.Model):
 
     def __repr__(self):
         return '<Result %r>' % self.filename
+
 
 db.create_all()
 
@@ -52,8 +44,10 @@ temp_base = "/app/data/tmp/"
 raw_base = "/app/data/raw/"
 pprocessed_base = "/app/data/pprocessed/"
 
+
 def make_subdirectories(directory):
     Path(directory).mkdir(parents=True, exist_ok=True)
+
 
 def delete_folder_contents(folder):
     for filename in os.listdir(folder):
@@ -66,17 +60,21 @@ def delete_folder_contents(folder):
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
+
 def get_chunk_name(uploaded_filename, chunk_number):
     return uploaded_filename + "_part_%03d" % chunk_number
 
+
 def get_chunk_name_finished(uploaded_filename, chunk_number):
     return uploaded_filename + "_part_%03d.finished" % chunk_number
+
 
 @app.route('/', methods=['GET'])
 def index():
     # Main page
     results = Results.query.all()
     return render_template('index.html', results=results)
+
 
 @app.route("/resumable", methods=['GET'])
 def resumable():
@@ -93,7 +91,8 @@ def resumable():
     temp_dir = os.path.join(temp_base, resumableIdentfier)
 
     # chunk path based on the parameters
-    chunk_file = os.path.join(temp_dir, get_chunk_name(resumableFilename, resumableChunkNumber))
+    chunk_file = os.path.join(temp_dir, get_chunk_name(
+        resumableFilename, resumableChunkNumber))
     app.logger.debug('Getting chunk: %s', chunk_file)
 
     if os.path.isfile(chunk_file):
@@ -108,9 +107,12 @@ def resumable():
 @app.route("/resumable", methods=['POST'])
 def resumable_post():
     resumableTotalChunks = request.form.get('resumableTotalChunks', type=int)
-    resumableChunkNumber = request.form.get('resumableChunkNumber', default=1, type=int)
-    resumableFilename = request.form.get('resumableFilename', default='error', type=str)
-    resumableIdentfier = request.form.get('resumableIdentifier', default='error', type=str)
+    resumableChunkNumber = request.form.get(
+        'resumableChunkNumber', default=1, type=int)
+    resumableFilename = request.form.get(
+        'resumableFilename', default='error', type=str)
+    resumableIdentfier = request.form.get(
+        'resumableIdentifier', default='error', type=str)
     tag_text = request.form.get('tag', default='', type=str)
 
     # get the chunk data
@@ -124,8 +126,9 @@ def resumable_post():
     chunk_name = get_chunk_name(resumableFilename, resumableChunkNumber)
     chunk_file = os.path.join(temp_dir, chunk_name)
     chunk_data.save(chunk_file)
-    chunk_name_finished = get_chunk_name_finished(resumableFilename, resumableChunkNumber)
-    #TODO: Clean up the chunk finished code
+    chunk_name_finished = get_chunk_name_finished(
+        resumableFilename, resumableChunkNumber)
+    # TODO: Clean up the chunk finished code
     chunk_finished_file = os.path.join(temp_dir, chunk_name_finished)
     f = open(chunk_finished_file, 'w')
     f.write("\n")
@@ -134,10 +137,13 @@ def resumable_post():
     app.logger.debug('Saved chunk: %s', chunk_file)
 
     # check if the upload is complete
-    chunk_paths = [os.path.join(temp_dir, get_chunk_name(resumableFilename, x)) for x in range(1, resumableTotalChunks+1)]
-    chunk_paths_finished = [os.path.join(temp_dir, get_chunk_name_finished(resumableFilename, x)) for x in range(1, resumableTotalChunks+1)]
+    chunk_paths = [os.path.join(temp_dir, get_chunk_name(
+        resumableFilename, x)) for x in range(1, resumableTotalChunks + 1)]
+    chunk_paths_finished = [os.path.join(temp_dir, get_chunk_name_finished(
+        resumableFilename, x)) for x in range(1, resumableTotalChunks + 1)]
     upload_complete = all([os.path.exists(p) for p in chunk_paths])
-    upload_finished_complete = all([os.path.exists(p) for p in chunk_paths_finished])
+    upload_finished_complete = all(
+        [os.path.exists(p) for p in chunk_paths_finished])
 
     # combine all the chunks to create the final file
     if upload_finished_complete:
@@ -155,15 +161,18 @@ def resumable_post():
         make_subdirectories(raw_base)
         try:
             dicom = pydicom.dcmread(target_file_name)
-            result = Results(filename=resumableFilename, accession=dicom.PatientID, result="ready to process", tag=tag_text)
+            result = Results(filename=resumableFilename, accession=dicom.PatientID,
+                             result="ready to process", tag=tag_text)
             shutil.move(target_file_name, f"{raw_base}{resumableFilename}")
         except Exception as e:
             print(e)
-            result = Results(filename=resumableFilename, accession='n/a', result="not a dicom", tag=tag_text)
+            result = Results(filename=resumableFilename,
+                             accession='n/a', result="not a dicom", tag=tag_text)
             input("this is not a dicom")
         db.session.add(result)
         db.session.commit()
     return 'OK'
+
 
 @app.route('/inference-status', methods=['GET'])
 def inferenceStatus():
@@ -178,6 +187,7 @@ def inferenceStatus():
             table_body.append(row[:])
 
         return jsonify({'header': table_header, 'body': table_body})
+
 
 @app.route('/run-model', methods=['POST'])
 def runModel():
@@ -195,6 +205,7 @@ def runModel():
         return "Success"
     return 'Error'
 
+
 @app.route('/clear-table', methods=['POST'])
 def clearTable():
     if request.method == 'POST':
@@ -203,6 +214,7 @@ def clearTable():
         db.session.commit()
         return 'Success'
     return 'Error'
+
 
 if __name__ == '__main__':
     # app.run(port=5002, threaded=False)
