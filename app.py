@@ -168,7 +168,7 @@ def resumable_post():
             print(e)
             result = Results(filename=resumableFilename,
                              accession='n/a', result="not a dicom", tag=tag_text)
-            input("this is not a dicom")
+            print("this is not a dicom")
         db.session.add(result)
         db.session.commit()
     return 'OK'
